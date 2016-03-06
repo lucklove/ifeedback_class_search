@@ -1,0 +1,9 @@
+[package]
+name = "ifeedback_class_search"
+version = "0.1.0"
+authors = ["Jos <gnu.crazier@gmail.com>"]
+
+[dependencies]
+hyper = "0.7.*"
+rustc-serialize = "0.3.18"
+mysql = "2.*.*"
