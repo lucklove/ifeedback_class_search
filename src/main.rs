@@ -1,6 +1,7 @@
 extern crate hyper;
 extern crate rustc_serialize;
 extern crate mysql;
+extern crate url;
 
 use std::io::Read;
 use std::collections::HashMap;
@@ -11,6 +12,7 @@ use rustc_serialize::json;
 use mysql as my;
 use hyper::uri::RequestUri::AbsolutePath;
 use std::sync::Mutex;
+use url::Url;
 
 #[cfg(test)]
 mod tests {
@@ -198,10 +200,38 @@ impl ClassSearcher {
                                 let (_, ref r) = b.clone();
                                 r.cmp(l)
                             });
+
                             let mut result : Vec<u32> = Vec::new();
-                            for (id, _) in matched {
-                                result.push(id);
+                            let (mut offset, mut limit) : (usize, usize) = (0, 100);
+                            if let AbsolutePath(ref path) = req.uri {
+                                let mock_url = "http://localhost".to_string() + path;
+                                let url = Url::parse(&mock_url).unwrap();
+                                if let Some(params) = url.query_pairs() {
+                                    for (k, v) in params {
+                                        if k == "offset" {
+                                            offset = if let Ok(off) = v.parse::<usize>() {
+                                                off
+                                            } else {
+                                                0
+                                            }
+                                        }
+                                        if k == "limit" {
+                                            limit = if let Ok(lmt) = v.parse::<usize>() {
+                                                lmt
+                                            } else {
+                                                0
+                                            }
+                                        }
+                                    }
+                                }
                             }
+                            for index in offset..matched.len() {
+                                if limit == 0 || index < offset + limit {
+                                    let (id, _) = matched[index];
+                                    result.push(id);
+                                }
+                            }
+                            
                             let output = ResponseObject { result: result };
                             let _ = res.send(json::encode(&output).unwrap().as_bytes()); 
                         } else { 
@@ -229,12 +259,9 @@ impl ClassSearcher {
                         let pool = my::Pool::new("mysql://root:lucklove@127.0.0.1").unwrap();
                         pool.prep_exec(r"delete from db_class_search.tb_keyword where id=?", (id,)).unwrap();
                         let mut keyword_map = self.keyword_map.lock().unwrap();
-                        println!("pre");
                         for mut stmt in pool.prepare(r"insert into db_class_search.tb_keyword(id, keyword) values(?, ?)")
                             .into_iter() {
-                            println!("pre in");
                             for k in &keys {
-                                println!("in");
                                 stmt.execute((id, k)).unwrap();
                                 if !keyword_map.contains_key(k) {
                                     keyword_map.insert(k.clone(), vec![id]);
